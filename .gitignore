@@ -44,3 +44,8 @@ CupheadOnlineInstaller
 *.pdb
 *.cache
 *.zip
+
+# Local-only (never committed)
+deps/
+private/
+artifacts/

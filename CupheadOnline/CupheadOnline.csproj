@@ -15,8 +15,11 @@
         $env:CUPHEAD_PATH = "D:\Games\Cuphead"
     -->
     <GameDir Condition="'$(CUPHEAD_PATH)' != ''">$(CUPHEAD_PATH)</GameDir>
-    <GameDir Condition="'$(GameDir)' == ''">H:\SteamLibrary\steamapps\common\Cuphead</GameDir>
-    <BepInExDir>$(GameDir)\BepInEx</BepInExDir>
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Cuphead</GameDir>
+    <!-- BepInEx references come from deps/BepInEx-5.4.23.5 (the pinned loader release, unzipped)
+         when present, so the game folder does not need BepInEx installed to build. -->
+    <BepInExDir Condition="Exists('$(MSBuildThisFileDirectory)..\deps\BepInEx-5.4.23.5\BepInEx\core\BepInEx.dll')">$(MSBuildThisFileDirectory)..\deps\BepInEx-5.4.23.5\BepInEx</BepInExDir>
+    <BepInExDir Condition="'$(BepInExDir)' == ''">$(GameDir)\BepInEx</BepInExDir>
     <ManagedDir>$(GameDir)\Cuphead_Data\Managed</ManagedDir>
     <DeployPluginOnBuild Condition="'$(DeployPluginOnBuild)' == ''">true</DeployPluginOnBuild>
   </PropertyGroup>
@@ -128,7 +131,7 @@
   <!-- Post-build: copy output DLL into BepInEx plugin folder -->
   <Target Name="DeployPlugin" AfterTargets="Build" Condition="'$(DeployPluginOnBuild)' == 'true'">
     <PropertyGroup>
-      <PluginDir>$(BepInExDir)\plugins\CupheadOnline</PluginDir>
+      <PluginDir>$(GameDir)\BepInEx\plugins\CupheadOnline</PluginDir>
     </PropertyGroup>
     <MakeDir Directories="$(PluginDir)" />
     <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(PluginDir)" />
