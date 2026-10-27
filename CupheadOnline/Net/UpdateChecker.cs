@@ -15,8 +15,10 @@ namespace CupheadOnline.Net
     /// </summary>
     public static class UpdateChecker
     {
-        public const string ReleasesPage = "https://github.com/Germanized/CupHeads/releases/latest";
-        const string LatestReleaseApi = "https://api.github.com/repos/Germanized/CupHeads/releases/latest";
+        // The Multiplayer Everything fork's releases. The listing (newest first) also holds the pinned
+        // "bepinex-5.4.23.5" loader release, so only "v<version>" tags count.
+        public const string ReleasesPage = "https://github.com/multiplayereverything/CupHeads/releases";
+        const string LatestReleaseApi = "https://api.github.com/repos/multiplayereverything/CupHeads/releases?per_page=10";
 
         static bool _started;
 
@@ -63,7 +65,7 @@ namespace CupheadOnline.Net
                     yield break;
                 }
 
-                var match = Regex.Match(request.downloadHandler.text ?? string.Empty, "\"tag_name\"\\s*:\\s*\"v?([0-9][0-9A-Za-z.\\-]*)\"");
+                var match = Regex.Match(request.downloadHandler.text ?? string.Empty, "\"tag_name\"\\s*:\\s*\"v([0-9][0-9A-Za-z.\\-]*)\"");
                 if (!match.Success)
                 {
                     Plugin.Log.LogInfo("[Update] Update check: no release tag found.");

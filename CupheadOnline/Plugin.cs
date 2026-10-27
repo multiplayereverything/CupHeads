@@ -129,6 +129,7 @@ namespace CupheadOnline
             Instance = this;
             Log      = Logger;
             Log.LogInfo("CupHeads " + PluginInfo.VERSION + " loading\u2026");
+            Diagnostics.LabMode.ParseArgs();
             SceneManager.sceneLoaded += OnSceneLoaded;
 
             _cfgShowConnectionHud = Config.Bind("UI", "ShowConnectionHud", true,
@@ -348,6 +349,7 @@ namespace CupheadOnline
             PatchTracked(harmony, registeredPatchTypes, typeof(LevelAwakeSeedPatch));
 
             AuditPatchCoverage(registeredPatchTypes);
+            Diagnostics.LabMode.Install(harmony, this);
 
             if (_failedPatchNames.Count > 0)
             {
@@ -470,6 +472,7 @@ namespace CupheadOnline
             add("EquipMenuSync", EquipMenuSync.Update);
             add("DicePalaceSync", DicePalaceSync.Update);
             add("OwnedStatus", ParticipantStatusTracker.TickOwnedStatus);
+            add("RemoteBodies", ParticipantStatusTracker.ReconcileRemoteBodies);
             add("DesyncSentinel", DesyncSentinel.Update);
             add("ShotTracers", RemoteShotTracer.Update);
             add("GhostDrift", GhostDriftController.Update);

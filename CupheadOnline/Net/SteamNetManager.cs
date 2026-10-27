@@ -48,7 +48,7 @@ namespace CupheadOnline.Net
         public string CurrentPeerSummary => BuildCurrentPeerSummary();
 
         public bool CanInviteFriend => _steamReady && _isHost && _lobbyId != CSteamID.Nil;
-        public bool CanCopyLobbyId => _steamReady && _lobbyId != CSteamID.Nil;
+        public bool CanCopyLobbyId => _steamReady && (_lobbyId != CSteamID.Nil || (_isHost && LanTransport.IsListening));
         public bool CanRetryLastAction => _lastRetryIntent != RetryIntent.None;
         public bool CanOpenSaveSlot => _steamReady && _state == NetState.Connected && _isHost;
         public bool CanRequestRecovery => _steamReady && _state == NetState.Connected;
@@ -64,7 +64,10 @@ namespace CupheadOnline.Net
         public bool IsWaitingIndefinitely => _state == NetState.WaitingInLobby;
 
         /// <summary>True when we are in a Steam lobby (host or guest).</summary>
-        public bool IsInLobby => _lobbyId != CSteamID.Nil;
+        public bool IsInLobby => _lobbyId != CSteamID.Nil || (_isHost && LanTransport.IsListening);
+
+        /// <summary>True while this session runs over the LAN fallback instead of Steam P2P.</summary>
+        public bool IsLanSession => LanTransport.Active;
 
         /// <summary>When the current state was entered (Time.realtimeSinceStartup).</summary>
         public float StateEnteredTime => _stateEnteredTime;
@@ -183,6 +186,10 @@ namespace CupheadOnline.Net
                     if (_lastDisconnectWasConnected)
                         return _lastRetryLobbyId == CSteamID.Nil ? "RECONNECT" : "REJOIN RUN";
                     return _lastRetryLobbyId == CSteamID.Nil ? "RETRY JOIN" : "REJOIN LOBBY";
+                case RetryIntent.LanHost:
+                    return "HOST ON LAN AGAIN";
+                case RetryIntent.LanJoin:
+                    return "REJOIN " + _lastLanAddress;
                 default:
                     return "RETRY LAST";
             }
@@ -342,6 +349,14 @@ namespace CupheadOnline.Net
                     status = _steamUnavailableStatus;
                     return false;
 
+                case RetryIntent.LanHost:
+                    status = StartLanHost(_lastLanPort) ? "Hosting on LAN again..." : _lastFailureReason;
+                    return _state != NetState.Error;
+
+                case RetryIntent.LanJoin:
+                    status = JoinLan(_lastLanAddress, _lastLanPort) ? "Rejoining " + _lastLanAddress + "..." : _lastFailureReason;
+                    return _state != NetState.Error;
+
                 default:
                     status = "No previous action is available to retry.";
                     return false;
@@ -381,6 +396,13 @@ namespace CupheadOnline.Net
             {
                 status = _steamUnavailableStatus;
                 return false;
+            }
+            if (_lobbyId == CSteamID.Nil && _isHost && LanTransport.IsListening)
+            {
+                string address = LanTransport.LocalAddresses().Split(',')[0].Trim();
+                GUIUtility.systemCopyBuffer = address + ":" + LanTransport.Port;
+                status = "LAN address " + address + ":" + LanTransport.Port + " copied to clipboard.";
+                return true;
             }
             if (_lobbyId == CSteamID.Nil)
             {
@@ -477,6 +499,8 @@ namespace CupheadOnline.Net
             None,
             Host,
             JoinLobby,
+            LanHost,
+            LanJoin,
         }
 
         enum HostPeerStage
@@ -501,6 +525,8 @@ namespace CupheadOnline.Net
         CSteamID _peerId  = CSteamID.Nil;
         CSteamID _lobbyId = CSteamID.Nil;
         RetryIntent _lastRetryIntent = RetryIntent.None;
+        string _lastLanAddress = "127.0.0.1";
+        int _lastLanPort = LanTransport.DefaultPort;
         CSteamID    _lastRetryLobbyId = CSteamID.Nil;
         string      _lastRetryPeerName = string.Empty;
         bool        _lastDisconnectWasConnected;
@@ -688,30 +714,95 @@ namespace CupheadOnline.Net
             }
 
             SteamNetworking.AcceptP2PSessionWithUser(req.m_steamIDRemote);
+            RegisterIncomingPeer(req.m_steamIDRemote);
+            Plugin.Log.LogInfo("[SteamNet] P2P accepted from " + FriendName(req.m_steamIDRemote));
+        }
+
+        void RegisterIncomingPeer(CSteamID remote)
+        {
             if (_isHost)
             {
-                var info = GetOrCreateHostPeer(req.m_steamIDRemote);
+                var info = GetOrCreateHostPeer(remote);
                 info.LastReceiveUtc = DateTime.UtcNow;
 
-                if (_peerId == CSteamID.Nil || (_peerId == req.m_steamIDRemote && _state != NetState.Connected))
+                if (_peerId == CSteamID.Nil || (_peerId == remote && _state != NetState.Connected))
                 {
-                    _peerId = req.m_steamIDRemote;
-                    UpdateHostPeerStage(req.m_steamIDRemote, HostPeerStage.WaitingHello);
+                    _peerId = remote;
+                    UpdateHostPeerStage(remote, HostPeerStage.WaitingHello);
                     UpdateLobbyActivePeerData();
                     SetState(NetState.WaitingHello, "Player connecting...");
                 }
-                else if (req.m_steamIDRemote != _peerId)
+                else if (remote != _peerId)
                 {
-                    UpdateHostPeerStage(req.m_steamIDRemote, HostPeerStage.WaitingHello);
-                    Plugin.Log.LogInfo("[SteamNet] Accepted extra gameplay peer " + FriendName(req.m_steamIDRemote) + ".");
+                    UpdateHostPeerStage(remote, HostPeerStage.WaitingHello);
+                    Plugin.Log.LogInfo("[SteamNet] Accepted extra gameplay peer " + FriendName(remote) + ".");
                 }
             }
             else
             {
-                _peerId = req.m_steamIDRemote;
+                _peerId = remote;
             }
+        }
 
-            Plugin.Log.LogInfo("[SteamNet] P2P accepted from " + FriendName(req.m_steamIDRemote));
+        // ── LAN fallback (direct IP) ──────────────────────────────────────────
+
+        /// <summary>Host over the LAN fallback: listens on TCP, no Steam lobby.</summary>
+        public bool StartLanHost(int port)
+        {
+            if (!EnsureSteamReady()) return false;
+
+            _lastRetryIntent = RetryIntent.LanHost;
+            _lastLanPort = port;
+            _lastDisconnectWasConnected = false;
+            Shutdown();
+            _isHost = true;
+            _hostPeers.Clear();
+            string error;
+            if (!LanTransport.Listen(port, out error))
+            {
+                _isHost = false;
+                SetState(NetState.Error, error);
+                return false;
+            }
+            MultiplayerSession.StartAsHost();
+            SetState(NetState.WaitingInLobby,
+                "Hosting on LAN (port " + port + ").\nYour address: " + LanTransport.LocalAddresses()
+                + "\nYour friend copies it and picks JOIN A GAME.");
+            return true;
+        }
+
+        /// <summary>Join a LAN host by address: connects, then runs the normal handshake.</summary>
+        public bool JoinLan(string address, int port)
+        {
+            if (!EnsureSteamReady()) return false;
+
+            _lastRetryIntent = RetryIntent.LanJoin;
+            _lastLanAddress = address;
+            _lastLanPort = port;
+            _lastDisconnectWasConnected = false;
+            Shutdown();
+            _isHost = false;
+            string error;
+            if (!LanTransport.Connect(address, port, out error))
+            {
+                SetState(NetState.Error, error);
+                return false;
+            }
+            _peerId = LanTransport.HostId;
+            _lastRetryPeerName = FriendName(_peerId);
+            SetState(NetState.WaitingWelcome, "Connecting to " + address + "...");
+            RawSendTo(_peerId, BuildHandshakePayload(PacketType.Hello), reliable: true);
+            Plugin.Log.LogInfo("[SteamNet] Hello sent to LAN host " + address + ":" + port
+                + " (v" + PluginInfo.VERSION + " proto " + NetProtocol.PROTOCOL + ")");
+            return true;
+        }
+
+        void ClosePeerSession(CSteamID peer)
+        {
+            if (LanTransport.IsLanId(peer))
+                LanTransport.Close(peer);
+            else
+                SteamNetworking.CloseP2PSessionWithUser(peer);
         }
 
         bool IsExpectedHost(CSteamID candidate)
@@ -886,7 +977,7 @@ namespace CupheadOnline.Net
 
                 if (_isHost)
                 {
-                    try { SteamNetworking.CloseP2PSessionWithUser(remote); } catch { }
+                    try { ClosePeerSession(remote); } catch { }
                     if (IsLobbyMember(remote))
                         UpdateHostPeerStage(remote, HostPeerStage.Lobby);
                     else
@@ -947,7 +1038,7 @@ namespace CupheadOnline.Net
             if (peer == CSteamID.Nil)
                 return;
 
-            try { SteamNetworking.CloseP2PSessionWithUser(peer); } catch { }
+            try { ClosePeerSession(peer); } catch { }
             RemoveHostPeer(peer);
 
             if (peer == _peerId)
@@ -972,7 +1063,7 @@ namespace CupheadOnline.Net
             _lastDisconnectWasConnected = wasConnected;
             CSteamID oldPeer = _peerId;
             if (_steamReady && oldPeer != CSteamID.Nil)
-                SteamNetworking.CloseP2PSessionWithUser(oldPeer);
+                ClosePeerSession(oldPeer);
             if (_isHost && oldPeer != CSteamID.Nil)
             {
                 if (IsLobbyMember(oldPeer))
@@ -991,7 +1082,7 @@ namespace CupheadOnline.Net
                 for (int i = 0; i < otherPeers.Count; i++)
                 {
                     var peer = otherPeers[i];
-                    try { SteamNetworking.CloseP2PSessionWithUser(peer); } catch { }
+                    try { ClosePeerSession(peer); } catch { }
                     if (IsLobbyMember(peer))
                         UpdateHostPeerStage(peer, HostPeerStage.Lobby);
                     else
@@ -1007,7 +1098,7 @@ namespace CupheadOnline.Net
                 RefreshHostLobbyRoster();
             MultiplayerSession.End();
 
-            if (_isHost && _lobbyId != CSteamID.Nil)
+            if (_isHost && (_lobbyId != CSteamID.Nil || LanTransport.IsListening))
             {
                 // Host stays in lobby — reset to WaitingInLobby so another player can join
                 SetState(NetState.WaitingInLobby,
@@ -1021,8 +1112,8 @@ namespace CupheadOnline.Net
                 bool canAutoReconnect = Plugin.EnableAutoReconnect
                     && wasConnected
                     && !_autoReconnectSuppressed
-                    && _lastRetryIntent == RetryIntent.JoinLobby
-                    && _lastRetryLobbyId != CSteamID.Nil;
+                    && ((_lastRetryIntent == RetryIntent.JoinLobby && _lastRetryLobbyId != CSteamID.Nil)
+                        || _lastRetryIntent == RetryIntent.LanJoin);
 
                 if (canAutoReconnect)
                 {
@@ -1071,7 +1162,10 @@ namespace CupheadOnline.Net
                 Plugin.Log.LogInfo("[SteamNet] Auto-reconnect attempt " + attempt + "/" + AUTO_RECONNECT_ATTEMPTS + "...");
                 ConnectionHUD.Show("Reconnecting... attempt " + attempt + "/" + AUTO_RECONNECT_ATTEMPTS);
                 int remainingAttempts = _autoReconnectAttemptsLeft;
-                if (JoinLobby(lobby))
+                bool rejoining = _lastRetryIntent == RetryIntent.LanJoin
+                    ? JoinLan(_lastLanAddress, _lastLanPort)
+                    : JoinLobby(lobby);
+                if (rejoining)
                 {
                     // JoinLobby resets state; restore the remaining attempt budget
                     // so a failed rejoin can try again.
@@ -1143,6 +1237,14 @@ namespace CupheadOnline.Net
         void DrainP2PPackets()
         {
             if (!_steamReady) return;
+
+            if (LanTransport.Active)
+            {
+                CSteamID lanPeer;
+                while (LanTransport.TryAccept(out lanPeer))
+                    RegisterIncomingPeer(lanPeer);
+                LanTransport.Drain(ProcessPacketSafe, MAX_PACKETS_PER_POLL);
+            }
 
             // Bounded per frame so a flood can never stall the game loop.
             int budget = MAX_PACKETS_PER_POLL;
@@ -1704,6 +1806,12 @@ namespace CupheadOnline.Net
         {
             if (!_steamReady) return;
             if (target == CSteamID.Nil) return;
+            if (Diagnostics.LabMutations.DropOutgoing(data)) return;
+            if (LanTransport.IsLanId(target))
+            {
+                LanTransport.Send(target, data, data.Length);
+                return;
+            }
             var mode = reliable ? EP2PSend.k_EP2PSendReliable : EP2PSend.k_EP2PSendUnreliable;
             SteamNetworking.SendP2PPacket(target, data, (uint)data.Length, mode);
         }
@@ -1718,8 +1826,8 @@ namespace CupheadOnline.Net
 
             if (_steamReady && _peerId != CSteamID.Nil)
             {
-                try { SteamNetworking.SendP2PPacket(_peerId, new[] { (byte)PacketType.Disconnect }, 1, EP2PSend.k_EP2PSendReliable); } catch { }
-                SteamNetworking.CloseP2PSessionWithUser(_peerId);
+                try { RawSendTo(_peerId, new[] { (byte)PacketType.Disconnect }, reliable: true); } catch { }
+                ClosePeerSession(_peerId);
             }
             if (_steamReady && _isHost)
             {
@@ -1727,7 +1835,7 @@ namespace CupheadOnline.Net
                 {
                     if (entry == null || entry.SteamId == CSteamID.Nil || entry.SteamId == _peerId)
                         continue;
-                    try { SteamNetworking.CloseP2PSessionWithUser(entry.SteamId); } catch { }
+                    try { ClosePeerSession(entry.SteamId); } catch { }
                 }
                 UpdateLobbyActivePeerData(CSteamID.Nil);
             }
@@ -1735,6 +1843,7 @@ namespace CupheadOnline.Net
             {
                 SteamMatchmaking.LeaveLobby(_lobbyId);
             }
+            LanTransport.Stop();
             _peerId          = CSteamID.Nil;
             _lobbyId         = CSteamID.Nil;
             _pendingDirectInvite = CSteamID.Nil;
@@ -2390,6 +2499,7 @@ namespace CupheadOnline.Net
         string FriendName(CSteamID id)
         {
             if (!_steamReady || id == CSteamID.Nil) return "Unknown Player";
+            if (LanTransport.IsLanId(id)) return LanTransport.Describe(id);
             return SteamFriends.GetFriendPersonaName(id);
         }
 

@@ -49,3 +49,4 @@ CupheadOnlineInstaller
 deps/
 private/
 artifacts/
+dist/

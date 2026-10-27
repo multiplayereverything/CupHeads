@@ -66,6 +66,34 @@ namespace CupheadOnline.Sync
             return true;
         }
 
+        /// <summary>
+        /// A partner parried the ghost of a body the other machine owns. The
+        /// parry plays here natively; the owner only revives if its own copy
+        /// happened to parry too, so ask the host to revive the owner (the
+        /// same request a ghost leaving the screen sends).
+        /// </summary>
+        public static void OnNativeParry(PlayerDeathEffect effect)
+        {
+            if (!MultiplayerSession.IsActive || effect == null || Plugin.Net == null || !Plugin.Net.IsConnected)
+                return;
+
+            PlayerId ghostId;
+            if (!TryGetDeathEffectPlayerId(effect, out ghostId) || MultiplayerSession.IsBodyOwnedLocally(ghostId))
+                return;
+
+            var request = new ReviveRequestPacket
+            {
+                PosX = effect.transform.position.x,
+                PosY = effect.transform.position.y,
+                Tick = MultiplayerSession.Tick,
+            };
+            Plugin.Log.LogInfo("[Revive] Parried " + ghostId + "'s ghost here; asking for the owner's revive.");
+            if (MultiplayerSession.IsHost)
+                ResolveHostReviveRequest((byte)MultiplayerSession.LocalId, effect.transform.position, request.Tick, Plugin.Net);
+            else
+                Plugin.Net.SendReviveRequest(ref request);
+        }
+
         public static void ResolveHostReviveRequest(
             byte requesterParticipantId,
             Vector2 requestPosition,
@@ -184,10 +212,24 @@ namespace CupheadOnline.Sync
             ParticipantStatusTracker.PushLocalStatus(player);
         }
 
-        static void ApplyLocalRevive(PlayerId localPlayerId, Vector2 revivePosition)
+        /// <summary>Revive this machine's copy of a body the other machine owns (its owner was revived).</summary>
+        internal static void ReviveRemoteBody(PlayerId playerId, Vector2 revivePosition)
+        {
+            ApplyLocalRevive(playerId, revivePosition, pushStatus: false);
+        }
+
+        internal static bool TryGetDeathEffectPosition(PlayerId playerId, out Vector2 position)
+        {
+            var effect = FindLocalDeathEffect(playerId);
+            position = effect != null ? (Vector2)effect.transform.position : Vector2.zero;
+            return effect != null;
+        }
+
+        static void ApplyLocalRevive(PlayerId localPlayerId, Vector2 revivePosition, bool pushStatus = true)
         {
             var player = GetPlayerSafe(localPlayerId);
-            if (player == null)
+            // Already standing (a native parry got there first): a second revive would reset its health to 1.
+            if (player == null || !player.IsDead)
                 return;
 
             var deathEffect = FindLocalDeathEffect(localPlayerId);
@@ -206,7 +248,8 @@ namespace CupheadOnline.Sync
             if (deathEffect != null)
                 Object.Destroy(deathEffect.gameObject);
 
-            ParticipantStatusTracker.PushLocalStatus(player);
+            if (pushStatus)
+                ParticipantStatusTracker.PushLocalStatus(player);
         }
 
         static bool MarkGrantApplied(ReviveGrantPacket pkt)

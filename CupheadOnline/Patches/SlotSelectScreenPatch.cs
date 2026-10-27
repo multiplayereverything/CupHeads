@@ -544,7 +544,7 @@ namespace CupheadOnline.Patches
         const int RowHost = 1, RowJoin = 2, RowRetry = 3, RowColor = 4, RowBugReport = 5, RowBack = 6,
                   RowCancel = 7, RowOpenFriends = 8, RowInvite = 9, RowCopyCode = 10, RowCloseLobby = 11,
                   RowSaveFile = 12, RowPlayAs = 13, RowStart = 14, RowAskSync = 15, RowLeave = 16,
-                  RowPlayWith = 17, RowInvitePartner = 18, RowGetUpdate = 19;
+                  RowPlayWith = 17, RowInvitePartner = 18, RowGetUpdate = 19, RowHostLan = 20;
 
         /// <summary>The last person this player connected with, as Steam sees them now.</summary>
         struct Partner
@@ -807,6 +807,24 @@ namespace CupheadOnline.Patches
                 catch { _clipboardCache = string.Empty; }
             }
             return _clipboardCache;
+        }
+
+        /// <summary>An IPv4 address (optionally :port) on the clipboard means "join this LAN host".</summary>
+        static bool TryGetClipboardLanAddress(out string address, out int port)
+        {
+            address = null;
+            port = Net.LanTransport.DefaultPort;
+            string raw = ReadClipboardThrottled();
+            if (string.IsNullOrEmpty(raw))
+                return false;
+            var match = System.Text.RegularExpressions.Regex.Match(raw.Trim(),
+                @"^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{2,5}))?$");
+            if (!match.Success)
+                return false;
+            address = match.Groups[1].Value;
+            if (match.Groups[2].Success)
+                int.TryParse(match.Groups[2].Value, out port);
+            return true;
         }
 
         static bool TryGetClipboardLobbyId(out string rawText, out string lobbyId)
@@ -1082,6 +1100,7 @@ namespace CupheadOnline.Patches
                         _rows.Add(LobbyRow.Action(RowRetry, Plugin.Net.GetRetryActionLabel()));
                     _rows.Add(LobbyRow.Action(RowHost, "HOST A GAME", steam));
                     _rows.Add(LobbyRow.Action(RowJoin, "JOIN A GAME", steam));
+                    _rows.Add(LobbyRow.Action(RowHostLan, "HOST ON LAN", steam));
                     color.GapBefore = true;
                     _rows.Add(color);
                     if (UpdateChecker.UpdateAvailable)
@@ -1248,7 +1267,14 @@ namespace CupheadOnline.Patches
                         + " (you have v" + PluginInfo.VERSION + ").";
                 case RowHost:
                     return "Open a friends-only lobby, then invite someone to join you.";
+                case RowHostLan:
+                    return "Same network or no Steam matchmaking: host by IP. COPY LOBBY CODE copies your address.";
                 case RowJoin:
+                {
+                    string lanAddress; int lanPort;
+                    if (TryGetClipboardLanAddress(out lanAddress, out lanPort))
+                        return "A LAN address (" + lanAddress + ") is on your clipboard. Press CONFIRM to join it.";
+                }
                     if (TryGetClipboardLobbyId(out clipboardRaw, out clipboardLobbyId))
                         return "A lobby code is on your clipboard. Press CONFIRM to join it.";
                     return Plugin.AutoOpenSteamFriends
@@ -1585,6 +1611,10 @@ namespace CupheadOnline.Patches
                 case RowHost:
                     OnHostGame();
                     break;
+                case RowHostLan:
+                    if (Plugin.Net.StartLanHost(Net.LanTransport.DefaultPort))
+                        MpMenuState.InputLocked = false;
+                    break;
                 case RowJoin:
                     if (!HandleJoinAccept())
                         OnJoinGame(inst);
@@ -1872,6 +1902,15 @@ namespace CupheadOnline.Patches
                 _waitingForInvite      = false;
                 MpMenuState.InputLocked = false;
                 MpMenuState.SetStatus(Plugin.Net.SteamUnavailableStatus);
+                return;
+            }
+
+            string lanAddress; int lanPort;
+            if (TryGetClipboardLanAddress(out lanAddress, out lanPort))
+            {
+                _waitingForInvite = false;
+                _joinOverlayReady = false;
+                MpMenuState.InputLocked = Plugin.Net.JoinLan(lanAddress, lanPort);
                 return;
             }
 

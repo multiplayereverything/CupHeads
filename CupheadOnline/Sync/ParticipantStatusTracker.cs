@@ -176,6 +176,96 @@ namespace CupheadOnline.Sync
             }
         }
 
+        static readonly System.Reflection.MethodInfo OnStatsDeathMethod =
+            HarmonyLib.AccessTools.Method(typeof(PlayerStatsManager), "OnStatsDeath");
+        static readonly float[] LowerSince = { -1f, -1f };
+        const float LowerGrace = 1.5f;
+
+        /// <summary>
+        /// Per frame: a body owned by the other machine follows its owner's
+        /// health downward. Hits reach this copy as replayed DamageEvents, and
+        /// PlayerDamageReceiver drops one that lands while this copy is still in
+        /// its own invulnerability window (or can't take damage in its current
+        /// state), so without this the copy could keep hearts its owner lost and
+        /// stay standing after its owner died. The owner's status has to agree
+        /// for LowerGrace seconds first, so a DamageEvent already on its way
+        /// still plays the hit itself.
+        /// </summary>
+        public static void ReconcileRemoteBodies()
+        {
+            if (!MultiplayerSession.IsActive || LocalDevSession.IsActive || Plugin.Net == null || !Plugin.Net.IsConnected)
+                return;
+            if (Level.Current == null || Level.Current.Ending || HealthSetter == null)
+                return;
+
+            float now = Time.unscaledTime;
+            for (int i = 0; i < 2; i++)
+            {
+                var id = (PlayerId)i;
+                ParticipantStatus status;
+                AbstractPlayerController player;
+                if (MultiplayerSession.IsBodyOwnedLocally(id)
+                 || !_statuses.TryGetValue((byte)i, out status) || !status.IsKnown
+                 || (player = GetPlayerSafe(id)) == null || player.stats == null)
+                {
+                    LowerSince[i] = -1f;
+                    continue;
+                }
+
+                // Owner alive again (a revive this copy never saw): stand this copy back up.
+                bool revive = player.IsDead && !status.IsDead && status.Health > 0;
+                bool lower = !player.IsDead && (status.IsDead || status.Health < player.stats.Health);
+                if (!revive && !lower)
+                {
+                    LowerSince[i] = -1f;
+                    continue;
+                }
+
+                if (LowerSince[i] < 0f)
+                    LowerSince[i] = now;
+                float latency = Plugin.Net != null ? Plugin.Net.Latency / 1000f : 0f;
+                if (now - LowerSince[i] < Mathf.Max(LowerGrace, 3f * latency))
+                    continue;
+                LowerSince[i] = -1f;
+
+                if (revive)
+                {
+                    Vector2 at;
+                    if (!TryGetPosition((byte)i, out at) && !ParticipantReviveController.TryGetDeathEffectPosition(id, out at))
+                        at = player.transform.position;
+                    Plugin.Log.LogInfo("[Status] " + id + " follows its owner: revived with " + status.Health + " HP.");
+                    try
+                    {
+                        ParticipantReviveController.ReviveRemoteBody(id, at);
+                        HealthSetter.Invoke(player.stats, new object[] { (int)status.Health });
+                        if (OnHealthChangedMethod != null)
+                            OnHealthChangedMethod.Invoke(player.stats, null);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Plugin.Log.LogWarning("[Status] Could not revive " + id + ": " + (ex.InnerException ?? ex).Message);
+                    }
+                    continue;
+                }
+
+                int target = status.IsDead ? 0 : status.Health;
+                Plugin.Log.LogInfo("[Status] " + id + " follows its owner: HP " + player.stats.Health + " -> " + target
+                    + (status.IsDead ? " (dead)" : "") + ".");
+                try
+                {
+                    HealthSetter.Invoke(player.stats, new object[] { target });
+                    if (OnHealthChangedMethod != null)
+                        OnHealthChangedMethod.Invoke(player.stats, null);
+                    if (target <= 0 && OnStatsDeathMethod != null)
+                        OnStatsDeathMethod.Invoke(player.stats, null);
+                }
+                catch (System.Exception ex)
+                {
+                    Plugin.Log.LogWarning("[Status] Could not lower " + id + ": " + (ex.InnerException ?? ex).Message);
+                }
+            }
+        }
+
         /// <summary>A status from the peer that owns this body: adopt its meter (and heals).</summary>
         public static void ApplyOwnerStats(PlayerStatusPacket pkt)
         {

@@ -110,6 +110,10 @@ namespace CupheadOnline.Patches
             value = false;
             if (!IsValidButton(actionId))
                 return true;
+            if (!down && !up && Diagnostics.LabInput.TryButton(actionId, out value))
+                return true;
+            if ((down || up) && Diagnostics.LabMode.Active)
+                return true;
 
             var query = down ? ButtonQuery.Down : up ? ButtonQuery.Up : ButtonQuery.Held;
             if (playerId != PlayerId.None)
@@ -130,6 +134,8 @@ namespace CupheadOnline.Patches
 
         internal static bool TryGetLocalAxis(PlayerId playerId, int actionId, out float value)
         {
+            if (Diagnostics.LabInput.TryAxis(actionId, out value))
+                return true;
             if (playerId != PlayerId.None)
             {
                 value = RawAxis(GetActions(playerId), actionId);

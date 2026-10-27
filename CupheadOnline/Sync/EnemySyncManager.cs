@@ -548,6 +548,17 @@ namespace CupheadOnline.Sync
         }
 
         /// <summary>Reads the active level's boss health, if a boss properties object exists.</summary>
+        /// <summary>Lab only: take a fraction of the boss's current HP through the game's damage path.</summary>
+        internal static bool LabDealBossDamage(float fraction, out float before, out float after)
+        {
+            before = after = 0f;
+            if (!TryGetLocalBossHp(out before) || before <= 0f)
+                return false;
+            bool ok = DealBossDamage(before * fraction);
+            TryGetLocalBossHp(out after);
+            return ok;
+        }
+
         public static bool TryGetLocalBossHp(out float currentHp)
         {
             currentHp = 0f;

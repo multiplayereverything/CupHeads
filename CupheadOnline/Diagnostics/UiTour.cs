@@ -57,7 +57,7 @@ namespace CupheadOnline.Diagnostics
         }
 
         /// <summary>Either developer run mode (both skip the intro video).</summary>
-        public static bool AnyActive => Active || PressTestActive;
+        public static bool AnyActive => Active || PressTestActive || LabMode.Active;
 
         static string OutDir => Path.Combine(BepInEx.Paths.BepInExRootPath, "CupHeadsUiTour");
 
@@ -221,7 +221,7 @@ namespace CupheadOnline.Diagnostics
                 Screen.SetResolution(1280, 720, false);
         }
 
-        static bool TryAdvanceTitle()
+        internal static bool TryAdvanceTitle()
         {
             if (SceneManager.GetActiveScene().name == "scene_slot_select")
                 return true;
