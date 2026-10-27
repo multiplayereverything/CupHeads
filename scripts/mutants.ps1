@@ -9,7 +9,7 @@ $mutants = [ordered]@{
     'input'    = @{ Drop = 'InputFrame'; MustFail = @('map.guest-cup-moves', 'level.guest-cup-moves') }
     'state'    = @{ Drop = 'PlayerState'; MustFail = @('level.host-cup-moves') }
     'boss'     = @{ Drop = 'EnemyState,StateHash'; MustFail = @('boss-hp-sync') }
-    'scenes'   = @{ Drop = 'SceneChange,MenuSceneChange,SceneRequest,LevelSync'; MustFail = @('level-transition') }
+    'scenes'   = @{ Drop = 'SceneChange,MenuSceneChange,SceneRequest,LevelSync'; MustFail = @('level-transition', 'back-to-map') }
     'health'   = @{ Drop = 'DamageEvent,PlayerStatus'; MustFail = @('guest-hits-and-death') }
     'revive'   = @{ Drop = 'ReviveRequest,ReviveGrant'; MustFail = @('revive', 'parry-revive') }
     # Lost hits: the owner's status stream must still bring the other copy down (ParticipantStatusTracker.ReconcileRemoteBodies).

@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.7.0 - 2026-10-27
+
+The first Multiplayer Everything release of this fork (CupHeads was made by Germanized). Wire protocol is still 4, so 1.7.0 connects to 1.5.x and 1.6.x, but use the same version on both PCs to get the fixes below.
+
+### Fixes
+
+- Your partner's cup now follows its owner's health and life state. A hit is replayed on the other machine, and the game drops one that lands while that copy is still invulnerable or can't take damage, so a copy could keep hearts its owner had lost and stay standing after its owner died. Now if the copy disagrees with its owner for 1.5 seconds, it loses the hearts, dies, or stands back up to match.
+- A partner revived by a ghost floating off the top of the screen (the heart taken from the other player) stood up only on their own machine; the other player still saw a ghost. The heart the other player gave up also didn't show on the guest's screen. Both now match.
+- Parrying your partner's ghost now revives them on their machine too. Before, the revive happened only where the parry was seen, unless the other machine's copy happened to parry at the same moment.
+- A revive that arrives for a player who is already standing is ignored (it used to reset their health to 1).
+
+### New
+
+- LAN / direct-IP fallback: `HOST ON LAN` in the multiplayer menu, `COPY LOBBY CODE` copies the host's address, and `JOIN A GAME` with an address on the clipboard joins it (TCP 27140). Online play still goes through Steam invites and Steam P2P.
+- No installer: the mod ships as `CupHeads-BepInEx-<version>.zip`, and BepInEx 5.4.23.5 has its own pinned release in this repo. The Multiplayer Everything launcher installs both.
+- The update notice checks this fork's releases.
+- A same-PC lab for developers (`scripts/run-lab.ps1`, `scripts/mutants.ps1`): two game copies, a bot on each side and a verifier for connect, map, movement, level transitions, boss HP, hits, death and both kinds of revive. Each check is shown to fail when its sync path is cut.
+
 ## v1.6.2 - 2026-10-15
 
 A small follow-up. Wire protocol is still 4, so 1.6.2 plays with 1.5.x and 1.6.x.

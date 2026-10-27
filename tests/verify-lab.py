@@ -80,7 +80,10 @@ def main(run):
     movement("map.guest-cup-moves", client, host, "p2", "move.map.client", 0.2)
 
     hl, cl = first(host, "level"), first(client, "level")
-    check("level-transition", hl and cl and hl["scene"] == cl["scene"], "host %s / client %s" % (hl and hl["scene"], cl and cl["scene"]))
+    # The guest follows the host's scene change directly; the session-snapshot auto-follow is a slower backup.
+    gap = abs(cl["t"] - hl["t"]) if hl and cl else None
+    check("level-transition", hl and cl and hl["scene"] == cl["scene"] and gap <= 3.0,
+          "host %s / client %s, %s apart" % (hl and hl["scene"], cl and cl["scene"], "%.1f s" % gap if gap is not None else "-"))
 
     movement("level.host-cup-moves", host, client, "p1", "move.level.host", 100)
     movement("level.guest-cup-moves", client, host, "p2", "move.level.client", 100)
@@ -140,9 +143,10 @@ def main(run):
     else:
         check("parry-revive", False, "host found no ghost to parry: %s" % parry)
 
-    hx, ca = first(host, "exit.level"), first(client, "map.again")
-    check("back-to-map", hx and first(host, "map.again") and ca,
-          "host exit %s, host map %s, client map %s" % (bool(hx), bool(first(host, "map.again")), bool(ca)))
+    hx, ha, ca = first(host, "exit.level"), first(host, "map.again"), first(client, "map.again")
+    gap = abs(ca["t"] - ha["t"]) if ha and ca else None
+    check("back-to-map", hx and ha and ca and gap <= 3.0,
+          "host exit %s, host map %s, client map %s, %s apart" % (bool(hx), bool(ha), bool(ca), "%.1f s" % gap if gap is not None else "-"))
 
     passed = sum(r["pass"] for r in results)
     with open(os.path.join(run, "results.json"), "w", encoding="utf-8") as f:

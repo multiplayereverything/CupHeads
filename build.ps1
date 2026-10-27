@@ -139,16 +139,19 @@ if (-not (Test-Path $ModDll)) {
 Write-Step "Packaging mod ZIP"
 $Version = [regex]::Match((Get-Content (Join-Path $Root "CupheadOnline\Plugin.cs") -Raw), 'VERSION\s*=\s*"([^"]+)"').Groups[1].Value
 if (-not $Version) { Fail "Could not read PluginInfo.VERSION from Plugin.cs." }
-$Stage = Join-Path $DistDir "stage"
-Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
-$StagePlugin = Join-Path $Stage "BepInEx\plugins\CupheadOnline"
-New-Item -ItemType Directory -Force $StagePlugin | Out-Null
-Copy-Item $ModDll (Join-Path $StagePlugin "CupheadOnline.dll") -Force
+New-Item -ItemType Directory -Force $DistDir | Out-Null
 $Zip = Join-Path $DistDir "CupHeads-BepInEx-$Version.zip"
 Remove-Item $Zip -Force -ErrorAction SilentlyContinue
+# Entries are written by hand: Windows PowerShell's ZipFile.CreateFromDirectory stores
+# backslash paths, which other unzippers (and launchers) read as one long file name.
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::CreateFromDirectory($Stage, $Zip)
-Remove-Item $Stage -Recurse -Force
+$Archive = [System.IO.Compression.ZipFile]::Open($Zip, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($Archive, $ModDll, "BepInEx/plugins/CupheadOnline/CupheadOnline.dll") | Out-Null
+} finally {
+    $Archive.Dispose()
+}
 Copy-Item $ModDll (Join-Path $DistDir "CupheadOnline.dll") -Force
 Write-Host "  $Zip" -ForegroundColor Green
 
