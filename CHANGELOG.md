@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+Not yet tested in the game: the same-PC lab could not start, because Steam was not reachable from game copies launched outside Steam. Wire protocol is still 4.
+
+### Fixes
+
+- The guest's jumps were cut short ("weird gravity"). The guest's own cup was pulled toward the host's re-simulation of it every frame, and in the air one frame of timing difference is already more than the 20-unit dead zone, so the guest was pulled down on the way up and held up on the way down. In the air the guest's height is now corrected only when it is more than 150 units off; sideways correction is unchanged. Lab check `jump.guest-full-height` (the guest's jump must reach 93% of the host's) and mutant `air-pull` added.
+- After a retry or a level change, the partner's cup could die at the start of the fight if this PC loaded first: the partner's last status from the previous level still said "dead". A status older than 1.25 s (the owner sends one every second in a level) no longer kills or revives the other copy.
+- With a previous partner, a retry and an update notice all showing, the main multiplayer menu had 9 rows and the card only draws 8, so BACK disappeared. HOST ON LAN now gives way when two of those optional rows are showing.
+- LAN players are told apart by made-up Steam IDs in a fixed range; that range now counts as LAN only while a LAN session is running, so a real Steam account in it is never routed to LAN.
+
 ## v1.7.0 - 2026-10-27
 
 The first Multiplayer Everything release of this fork (CupHeads was made by Germanized). Wire protocol is still 4, so 1.7.0 connects to 1.5.x and 1.6.x, but use the same version on both PCs to get the fixes below.

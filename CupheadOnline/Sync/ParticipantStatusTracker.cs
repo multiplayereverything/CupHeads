@@ -18,6 +18,7 @@ namespace CupheadOnline.Sync
             public bool IsMugman;
             public bool IsKnown;
             public uint Tick;
+            public float ReceivedAt;
         }
 
         static readonly Dictionary<byte, ParticipantStatus> _statuses =
@@ -56,6 +57,7 @@ namespace CupheadOnline.Sync
                 IsMugman = pkt.IsMugman,
                 IsKnown = true,
                 Tick = pkt.Tick,
+                ReceivedAt = Time.unscaledTime,
             };
         }
 
@@ -180,6 +182,9 @@ namespace CupheadOnline.Sync
             HarmonyLib.AccessTools.Method(typeof(PlayerStatsManager), "OnStatsDeath");
         static readonly float[] LowerSince = { -1f, -1f };
         const float LowerGrace = 1.5f;
+        // The owner sends a heartbeat every second while it is in the level. An older status is from
+        // before a retry or a level change (the owner is still loading), so it must not kill this copy.
+        const float StatusFresh = 1.25f;
 
         /// <summary>
         /// Per frame: a body owned by the other machine follows its owner's
@@ -224,7 +229,7 @@ namespace CupheadOnline.Sync
                 if (LowerSince[i] < 0f)
                     LowerSince[i] = now;
                 float latency = Plugin.Net != null ? Plugin.Net.Latency / 1000f : 0f;
-                if (now - LowerSince[i] < Mathf.Max(LowerGrace, 3f * latency))
+                if (now - LowerSince[i] < Mathf.Max(LowerGrace, 3f * latency) || now - status.ReceivedAt > StatusFresh + latency)
                     continue;
                 LowerSince[i] = -1f;
 

@@ -13,13 +13,15 @@ $mutants = [ordered]@{
     'health'   = @{ Drop = 'DamageEvent,PlayerStatus'; MustFail = @('guest-hits-and-death') }
     'revive'   = @{ Drop = 'ReviveRequest,ReviveGrant'; MustFail = @('revive', 'parry-revive') }
     # Lost hits: the owner's status stream must still bring the other copy down (ParticipantStatusTracker.ReconcileRemoteBodies).
+    # The guest's own cup corrected vertically in mid-air again: its jump must come out short.
+    'air-pull' = @{ Spec = 'airpull'; MustFail = @('jump.guest-full-height') }
     'lost-hits' = @{ Drop = 'DamageEvent'; MustPass = @('guest-hits-and-death', 'guest-second-death') }
 }
 $summary = @()
 foreach ($name in $mutants.Keys) {
     if ($Only.Count -gt 0 -and $Only -notcontains $name) { continue }
     $m = $mutants[$name]
-    $spec = "drop:$($m.Drop)"
+    $spec = if ($m.Spec) { $m.Spec } else { "drop:$($m.Drop)" }
     Write-Output "=== $name ($spec)"
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'run-lab.ps1') -Mutate $spec | Out-Null
     $tag = 'mut-' + ($spec -replace '[^A-Za-z0-9]+', '-')

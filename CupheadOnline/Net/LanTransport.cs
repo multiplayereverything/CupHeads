@@ -48,8 +48,9 @@ namespace CupheadOnline.Net
         public static int Port { get; private set; }
         public static string RemoteAddress { get; private set; }
 
+        /// <summary>Only while a LAN session is up, so a real Steam account in this range still uses Steam P2P.</summary>
         public static bool IsLanId(CSteamID id) =>
-            (id.m_SteamID & 0xFFFFFFFFFF000000UL) == (FakeIdBase & 0xFFFFFFFFFF000000UL);
+            Active && (id.m_SteamID & 0xFFFFFFFFFF000000UL) == (FakeIdBase & 0xFFFFFFFFFF000000UL);
 
         public static string Describe(CSteamID id) =>
             id == HostId ? "LAN host" : "LAN player " + (id.m_SteamID - FakeIdBase);

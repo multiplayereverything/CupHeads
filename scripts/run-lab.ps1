@@ -3,7 +3,7 @@
 # 30 fps, BelowNormal priority) that restore at the right edge of the primary monitor. Placement is set once at launch;
 # nothing is activated, made topmost or sent input. Only processes this script started are ever stopped.
 # Usage: run-lab.ps1 [-Mutate drop:InputFrame] [-Seconds 240] [-Level Veggies]
-param([string]$Mutate = '', [int]$Seconds = 240, [string]$Level = 'Veggies', [int]$Port = 27141)
+param([string]$Mutate = '', [int]$Seconds = 240, [string]$Level = 'Veggies', [int]$Port = 27141, [int]$Fps = 30)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $dll = Join-Path $root 'CupheadOnline\bin\Release\net35\CupheadOnline.dll'
@@ -58,6 +58,7 @@ try {
         $labArgs = "-screen-fullscreen 0 -screen-width 640 -screen-height 360 -screen-quality Fastest -logFile `"$out\$role-unity.log`" " +
                    "--cupheads-lab $role --cupheads-lab-port $Port --cupheads-lab-level $Level --cupheads-lab-out `"$out\$role.jsonl`""
         if ($Mutate) { $labArgs += " --cupheads-mutate $Mutate" }
+        if ($Fps -ne 30) { $labArgs += " --cupheads-lab-fps $Fps" }
         $p = Start-Process -FilePath (Join-Path $dir 'Cuphead.exe') -WorkingDirectory $dir -ArgumentList $labArgs -WindowStyle Minimized -PassThru
         $started += $p
         try { $p.PriorityClass = 'BelowNormal' } catch { }

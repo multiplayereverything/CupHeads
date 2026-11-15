@@ -1100,7 +1100,12 @@ namespace CupheadOnline.Patches
                         _rows.Add(LobbyRow.Action(RowRetry, Plugin.Net.GetRetryActionLabel()));
                     _rows.Add(LobbyRow.Action(RowHost, "HOST A GAME", steam));
                     _rows.Add(LobbyRow.Action(RowJoin, "JOIN A GAME", steam));
-                    _rows.Add(LobbyRow.Action(RowHostLan, "HOST ON LAN", steam));
+                    // The card fits 7 rows cleanly and draws 8 at most, so the LAN row gives way when two
+                    // of the optional rows are showing (after a LAN session the retry row hosts on LAN again).
+                    int optional = (partner.Known ? 1 : 0) + (steam && Plugin.Net.CanRetryLastAction ? 1 : 0)
+                                 + (UpdateChecker.UpdateAvailable ? 1 : 0);
+                    if (optional <= 1)
+                        _rows.Add(LobbyRow.Action(RowHostLan, "HOST ON LAN", steam));
                     color.GapBefore = true;
                     _rows.Add(color);
                     if (UpdateChecker.UpdateAvailable)

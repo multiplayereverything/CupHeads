@@ -82,7 +82,7 @@ namespace CupheadOnline.Patches
             Plugin.Net.SendPlayerState(ref pkt);
             if (MultiplayerSession.IsClient)
             {
-                Vector2 step = OwnPlayerReconciler.Apply(__instance.transform);
+                Vector2 step = OwnPlayerReconciler.Apply(__instance.transform, airborne: !__instance.Grounded);
                 if (step != Vector2.zero && LastPositionFixedRef != null && LastPositionRef != null)
                 {
                     // The motor derives MoveDirection (and so the run/idle pose)

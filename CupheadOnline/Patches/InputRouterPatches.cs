@@ -113,7 +113,10 @@ namespace CupheadOnline.Patches
             if (!down && !up && Diagnostics.LabInput.TryButton(actionId, out value))
                 return true;
             if ((down || up) && Diagnostics.LabMode.Active)
+            {
+                value = down && Diagnostics.LabInput.Down(actionId);
                 return true;
+            }
 
             var query = down ? ButtonQuery.Down : up ? ButtonQuery.Up : ButtonQuery.Held;
             if (playerId != PlayerId.None)

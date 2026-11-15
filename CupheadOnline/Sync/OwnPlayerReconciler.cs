@@ -22,6 +22,11 @@ namespace CupheadOnline.Sync
         const float DeadZone = 20f;
         const float SnapDistance = 320f;
         const float BlendPerStep = 0.2f;
+        // A jump rises at about 1200 units/s, so one frame of timing difference between the two
+        // machines is already past DeadZone. Correcting that pulled the guest down on the way up and
+        // held it up on the way down ("weird gravity", jumps cut short). In the air only a real
+        // vertical divergence (a missed platform, a knock-up) is corrected.
+        const float AirVerticalDeadZone = 150f;
 
         /// <summary>Levels: players run at 490 units/s. The world map walker moves at 2.5 units/s.</summary>
         public const float LevelUnitScale = 1f;
@@ -127,8 +132,11 @@ namespace CupheadOnline.Sync
         /// Guest: nudge the local body toward the reconciled position. Call once
         /// per fixed step. Returns the offset applied (zero when none).
         /// </summary>
-        public static Vector2 Apply(Transform body)
+        public static Vector2 Apply(Transform body, bool airborne = false)
         {
+            if (airborne && !Diagnostics.LabMutations.AirPull && Mathf.Abs(_pending.y) < AirVerticalDeadZone * _unitScale)
+                _pending.y = 0f;
+
             float minStep = 0.1f * _unitScale;
             if (body == null || _pending.sqrMagnitude < minStep * minStep)
                 return Vector2.zero;

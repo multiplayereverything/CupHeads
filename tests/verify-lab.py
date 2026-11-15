@@ -99,6 +99,25 @@ def main(run):
     else:
         check("boss-hp-sync", False, "host could not damage the boss: %s" % hit)
 
+    def apex(rows, step, key):
+        """Height of the jump that starts at the step: peak minus the standing height just before it."""
+        j = first(rows, step)
+        if not j:
+            return None
+        ys = [r[key] for r in rows if r.get("ev") == "y" and r.get(key) is not None and j["t"] - 0.4 <= r["t"] <= j["t"] + 1.6]
+        base = [r[key] for r in rows if r.get("ev") == "y" and r.get(key) is not None and j["t"] - 0.4 <= r["t"] <= j["t"]]
+        return max(ys) - min(base) if ys and base else None
+
+    # The host's own cup runs the plain game motor, so its full jump is the reference height.
+    ref, own, seen = apex(host, "jump.host", "p1"), apex(client, "jump.client", "p2"), None
+    cj = first(client, "jump.client")
+    if cj:
+        ys = [r["p2"] for r in host if r.get("ev") == "y" and r.get("p2") is not None and cj["t"] - 0.4 <= r["t"] <= cj["t"] + 1.6]
+        seen = max(ys) - min(ys) if ys else None
+    check("jump.guest-full-height", ref and own and ref > 100 and own >= 0.93 * ref,
+          "host's own jump %s, guest's own jump %s (%s), host saw the guest jump %s"
+          % (ref and round(ref, 1), own and round(own, 1), "%.0f%%" % (100 * own / ref) if ref and own else "-", seen and round(seen, 1)))
+
     def death(name, step):
         kill = first(client, step)
         hits = events(client, step + ".hit")

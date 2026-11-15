@@ -35,6 +35,7 @@ namespace CupheadOnline.Diagnostics
         public static int Port { get; private set; }
         public static string LevelName { get; private set; }
         static string _outPath;
+        static int _fps = 30;
 
         public static void ParseArgs()
         {
@@ -64,6 +65,8 @@ namespace CupheadOnline.Diagnostics
                     LevelName = next;
                 else if (a == "--cupheads-mutate" && next != null)
                     LabMutations.Configure(next);
+                else if (a == "--cupheads-lab-fps" && next != null)
+                    int.TryParse(next, out _fps);
             }
         }
 
@@ -73,7 +76,7 @@ namespace CupheadOnline.Diagnostics
                 return;
 
             Application.runInBackground = true;
-            Application.targetFrameRate = 30;
+            Application.targetFrameRate = _fps;
             QualitySettings.vSyncCount = 0;
             QualitySettings.SetQualityLevel(0, true);
             AudioListener.volume = 0f;
@@ -138,9 +141,13 @@ namespace CupheadOnline.Diagnostics
         static HashSet<byte> _drop;
         static string _raw = "none";
 
+        /// <summary>"airpull": the guest's own cup is corrected vertically in the air again (the short-jump bug).</summary>
+        public static bool AirPull { get; private set; }
+
         public static void Configure(string spec)
         {
             _raw = spec;
+            AirPull = spec == "airpull";
             if (!spec.StartsWith("drop:", StringComparison.Ordinal))
                 return;
             _drop = new HashSet<byte>();
@@ -185,6 +192,44 @@ namespace CupheadOnline.Diagnostics
             return true;
         }
 
+        static int _downButton = -1;
+        static float _downAt;
+        static int _downUpdateFrame;
+        static bool _downFixedServed;
+        static float _downFixedTime;
+
+        /// <summary>Hold a button from now on, with one press edge (served once per loop, like Rewired).</summary>
+        public static void Press(int button)
+        {
+            Buttons |= 1u << button;
+            _downButton = button;
+            _downAt = Time.realtimeSinceStartup;
+            _downUpdateFrame = -1;
+            _downFixedServed = false;
+        }
+
+        public static bool Down(int actionId)
+        {
+            if (actionId != _downButton)
+                return false;
+            if (Time.inFixedTimeStep)
+            {
+                if (_downFixedServed)
+                    return _downFixedTime == Time.fixedTime;
+                if (Time.realtimeSinceStartup - _downAt > 0.2f)
+                    return false;
+                _downFixedServed = true;
+                _downFixedTime = Time.fixedTime;
+                return true;
+            }
+            if (_downUpdateFrame >= 0)
+                return _downUpdateFrame == Time.frameCount;
+            if (Time.realtimeSinceStartup - _downAt > 0.2f)
+                return false;
+            _downUpdateFrame = Time.frameCount;
+            return true;
+        }
+
         public static void Release()
         {
             AxisX = 0f;
@@ -219,6 +264,12 @@ namespace CupheadOnline.Diagnostics
         {
             Write("{\"t\":" + Now() + ",\"ev\":\"" + name + "\"" + (string.IsNullOrEmpty(fields) ? "" : "," + fields) + "}");
             Plugin.Log.LogInfo("[Lab] " + name + (string.IsNullOrEmpty(fields) ? "" : " " + fields));
+        }
+
+        /// <summary>A per-frame line for the lab file only (kept out of the BepInEx log).</summary>
+        public static void Trace(string name, string fields)
+        {
+            Write("{\"t\":" + Now() + ",\"ev\":\"" + name + "\"," + fields + "}");
         }
 
         static void Write(string line)
@@ -361,6 +412,14 @@ namespace CupheadOnline.Diagnostics
             yield return Pause(host ? 3f : 7f);
             yield return Steer(host ? "move.level.host" : "move.level.client", 1f, 1.2f);
 
+            // ── Full jumps: the host's cup is the reference, the guest's must match it ──
+            Plugin.Instance.StartCoroutine(TraceHeights(levelAt + 4.5f, levelAt + 11f));
+            yield return Until(levelAt + (host ? 5.5f : 9.2f));
+            LabLog.Event(host ? "jump.host" : "jump.client");
+            LabInput.Press((int)CupheadButton.Jump);
+            yield return new WaitForSecondsRealtime(0.6f);
+            LabInput.Release();
+
             if (host)
             {
                 // ── Boss damage on the host ──────────────────────────────────
@@ -464,6 +523,24 @@ namespace CupheadOnline.Diagnostics
                 Plugin.Log.LogWarning("[Lab] parry: " + ex);
             }
             return false;
+        }
+
+        /// <summary>Both cups' heights every frame, so verify-lab.py can measure each jump on each copy.</summary>
+        static IEnumerator TraceHeights(float from, float to)
+        {
+            yield return Until(from);
+            while (Time.realtimeSinceStartup < to && Level.Current != null)
+            {
+                var sb = new StringBuilder(48);
+                for (int i = 0; i < 2; i++)
+                {
+                    AbstractPlayerController p = null;
+                    try { p = PlayerManager.GetPlayer((PlayerId)i); } catch { }
+                    sb.Append(i == 0 ? "\"p1\":" : ",\"p2\":").Append(p != null ? LabLog.F(p.transform.position.y) : "null");
+                }
+                LabLog.Trace("y", sb.ToString());
+                yield return null;
+            }
         }
 
         static IEnumerator Until(float realtime)
