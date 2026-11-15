@@ -36,7 +36,18 @@ namespace CupheadOnline.Net
             public byte[] Buf = new byte[64 * 1024];
             public int Len;
             public bool Closed;
+            public readonly Queue<KeyValuePair<float, byte[]>> Held = new Queue<KeyValuePair<float, byte[]>>();
+            public float LastRelease;
         }
+
+        /// <summary>
+        /// Lab only (--cupheads-lab-delay ms[,jitter ms]): hold each received frame this long, so the
+        /// same-PC lab sees an internet-like round trip. Frames stay in order, as TCP and Steam's
+        /// reliable channel keep them. 0 delivers at once.
+        /// </summary>
+        public static int LabDelayMs;
+        public static int LabJitterMs;
+        static readonly System.Random LabRandom = new System.Random(1234);
 
         static Socket _listener;
         static readonly List<Conn> _conns = new List<Conn>(4);
@@ -202,7 +213,18 @@ namespace CupheadOnline.Net
                     Buffer.BlockCopy(c.Buf, off + 4, pkt, 0, len);
                     off += 4 + len;
                     budget--;
-                    if (len > 0) deliver(pkt, len, c.Id);
+                    if (len <= 0) continue;
+                    if (LabDelayMs <= 0 && c.Held.Count == 0) { deliver(pkt, len, c.Id); continue; }
+                    float at = UnityEngine.Time.realtimeSinceStartup
+                             + (LabDelayMs + (LabJitterMs > 0 ? LabRandom.Next(-LabJitterMs, LabJitterMs + 1) : 0)) / 1000f;
+                    c.LastRelease = Math.Max(c.LastRelease, at);
+                    c.Held.Enqueue(new KeyValuePair<float, byte[]>(c.LastRelease, pkt));
+                }
+                float now = UnityEngine.Time.realtimeSinceStartup;
+                while (c.Held.Count > 0 && c.Held.Peek().Key <= now)
+                {
+                    var held = c.Held.Dequeue().Value;
+                    deliver(held, held.Length, c.Id);
                 }
                 if (off > 0)
                 {
@@ -210,7 +232,7 @@ namespace CupheadOnline.Net
                     c.Len -= off;
                 }
 
-                if (c.Closed && c.Len < 4)
+                if (c.Closed && c.Len < 4 && c.Held.Count == 0)
                 {
                     try { c.Socket.Close(); } catch { }
                     _conns.RemoveAt(i);

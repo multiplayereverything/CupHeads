@@ -68,6 +68,8 @@ namespace CupheadOnline.Sync
                 float now = Time.unscaledTime;
                 if (localOpen != _hostLastSentOpen || now >= _hostNextHeartbeatAt)
                 {
+                    if (localOpen != _hostLastSentOpen)
+                        Plugin.Log.LogInfo("[EquipSync] Host equip menu " + (localOpen ? "opened." : "closed."));
                     _hostLastSentOpen = localOpen;
                     _hostNextHeartbeatAt = now + HostHeartbeat;
                     var pkt = new LevelSyncPacket

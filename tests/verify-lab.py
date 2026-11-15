@@ -99,24 +99,21 @@ def main(run):
     else:
         check("boss-hp-sync", False, "host could not damage the boss: %s" % hit)
 
-    def apex(rows, step, key):
-        """Height of the jump that starts at the step: peak minus the standing height just before it."""
-        j = first(rows, step)
-        if not j:
-            return None
-        ys = [r[key] for r in rows if r.get("ev") == "y" and r.get(key) is not None and j["t"] - 0.4 <= r["t"] <= j["t"] + 1.6]
-        base = [r[key] for r in rows if r.get("ev") == "y" and r.get(key) is not None and j["t"] - 0.4 <= r["t"] <= j["t"]]
+    def apex(rows, j, key):
+        """Height of the jump that starts at event j: peak (within 0.8 s) minus the standing height just before it."""
+        ys = [r[key] for r in rows if r.get("ev") == "y" and r.get(key) is not None and j["t"] <= r["t"] <= j["t"] + 0.8]
+        base = [r[key] for r in rows if r.get("ev") == "y" and r.get(key) is not None and j["t"] - 0.3 <= r["t"] <= j["t"]]
         return max(ys) - min(base) if ys and base else None
 
     # The host's own cup runs the plain game motor, so its full jump is the reference height.
-    ref, own, seen = apex(host, "jump.host", "p1"), apex(client, "jump.client", "p2"), None
-    cj = first(client, "jump.client")
-    if cj:
-        ys = [r["p2"] for r in host if r.get("ev") == "y" and r.get("p2") is not None and cj["t"] - 0.4 <= r["t"] <= cj["t"] + 1.6]
-        seen = max(ys) - min(ys) if ys else None
-    check("jump.guest-full-height", ref and own and ref > 100 and own >= 0.93 * ref,
-          "host's own jump %s, guest's own jump %s (%s), host saw the guest jump %s"
-          % (ref and round(ref, 1), own and round(own, 1), "%.0f%%" % (100 * own / ref) if ref and own else "-", seen and round(seen, 1)))
+    hj = first(host, "jump.host")
+    ref = apex(host, hj, "p1") if hj else None
+    own = [apex(client, j, "p2") for j in events(client, "jump.client")]
+    own = [h for h in own if h is not None]
+    low = min(own) if own else None
+    check("jump.guest-full-height", ref and len(own) == 3 and ref > 100 and low >= 0.93 * ref,
+          "host's own jump %s, guest's own jumps %s (lowest %s)"
+          % (ref and round(ref, 1), [round(h, 1) for h in own], "%.0f%%" % (100 * low / ref) if ref and low else "-"))
 
     def death(name, step):
         kill = first(client, step)
@@ -164,7 +161,7 @@ def main(run):
 
     hx, ha, ca = first(host, "exit.level"), first(host, "map.again"), first(client, "map.again")
     gap = abs(ca["t"] - ha["t"]) if ha and ca else None
-    check("back-to-map", hx and ha and ca and gap <= 3.0,
+    check("back-to-map", hx and ha and ca and gap <= 1.5,
           "host exit %s, host map %s, client map %s, %s apart" % (bool(hx), bool(ha), bool(ca), "%.1f s" % gap if gap is not None else "-"))
 
     passed = sum(r["pass"] for r in results)

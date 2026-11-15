@@ -67,6 +67,12 @@ namespace CupheadOnline.Diagnostics
                     LabMutations.Configure(next);
                 else if (a == "--cupheads-lab-fps" && next != null)
                     int.TryParse(next, out _fps);
+                else if (a == "--cupheads-lab-delay" && next != null)
+                {
+                    var parts = next.Split(',');
+                    int.TryParse(parts[0], out LanTransport.LabDelayMs);
+                    if (parts.Length > 1) int.TryParse(parts[1], out LanTransport.LabJitterMs);
+                }
             }
         }
 
@@ -83,7 +89,7 @@ namespace CupheadOnline.Diagnostics
 
             LabLog.Open(_outPath ?? Path.Combine(BepInEx.Paths.GameRootPath, "lab-" + (IsHost ? "host" : "client") + ".jsonl"));
             LabLog.Event("boot", "\"role\":\"" + (IsHost ? "host" : "client") + "\",\"version\":\"" + PluginInfo.VERSION
-                + "\",\"mutate\":\"" + LabMutations.Describe() + "\"");
+                + "\",\"mutate\":\"" + LabMutations.Describe() + "\",\"delay\":" + LanTransport.LabDelayMs + ",\"jitter\":" + LanTransport.LabJitterMs);
 
             PrepareSaves();
             var savePath = AccessTools.PropertyGetter(typeof(OnlineInterfaceSteam), "SavePath");
@@ -414,11 +420,16 @@ namespace CupheadOnline.Diagnostics
 
             // ── Full jumps: the host's cup is the reference, the guest's must match it ──
             Plugin.Instance.StartCoroutine(TraceHeights(levelAt + 4.5f, levelAt + 11f));
-            yield return Until(levelAt + (host ? 5.5f : 9.2f));
-            LabLog.Event(host ? "jump.host" : "jump.client");
-            LabInput.Press((int)CupheadButton.Jump);
-            yield return new WaitForSecondsRealtime(0.6f);
-            LabInput.Release();
+            // The guest jumps three times: whether a correction lands mid-jump depends on how each
+            // jump's timing lines up with the host's, so one jump alone can miss the bug.
+            for (int j = 0; j < (host ? 1 : 3); j++)
+            {
+                yield return Until(levelAt + (host ? 5.5f : 8.4f + 0.85f * j));
+                LabLog.Event(host ? "jump.host" : "jump.client");
+                LabInput.Press((int)CupheadButton.Jump);
+                yield return new WaitForSecondsRealtime(0.5f);
+                LabInput.Release();
+            }
 
             if (host)
             {

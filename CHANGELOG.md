@@ -2,14 +2,21 @@
 
 ## Unreleased
 
-Not yet tested in the game: the same-PC lab could not start, because Steam was not reachable from game copies launched outside Steam. Wire protocol is still 4.
+Wire protocol is still 4. Tested in the same-PC lab with an 80 ms (±30 ms) delay on the link: 16/16 checks, and all eight mutants behave as expected. Not yet tested between two real Steam accounts.
 
 ### Fixes
 
-- The guest's jumps were cut short ("weird gravity"). The guest's own cup was pulled toward the host's re-simulation of it every frame, and in the air one frame of timing difference is already more than the 20-unit dead zone, so the guest was pulled down on the way up and held up on the way down. In the air the guest's height is now corrected only when it is more than 150 units off; sideways correction is unchanged. Lab check `jump.guest-full-height` (the guest's jump must reach 93% of the host's) and mutant `air-pull` added.
+- The guest's jumps were cut short ("weird gravity"). In the lab with the old code and an internet-like delay, two of the guest's three jumps reached only 98 and 107 units of the full 283. The guest's own cup was pulled toward the host's re-simulation of it every frame, and in the air one frame of timing difference is already more than the 20-unit dead zone, so the guest was pulled down on the way up and held up on the way down. In the air the guest's height is now corrected only when it is more than 150 units off; sideways correction is unchanged. Lab check `jump.guest-full-height` (each of the guest's three jumps must reach 93% of the host's) and mutant `air-pull` added.
 - After a retry or a level change, the partner's cup could die at the start of the fight if this PC loaded first: the partner's last status from the previous level still said "dead". A status older than 1.25 s (the owner sends one every second in a level) no longer kills or revives the other copy.
 - With a previous partner, a retry and an update notice all showing, the main multiplayer menu had 9 rows and the card only draws 8, so BACK disappeared. HOST ON LAN now gives way when two of those optional rows are showing.
+- LAN play no longer needs Steam: HOST ON LAN, and JOIN A GAME with a LAN address on the clipboard, work when Steam isn't running.
 - LAN players are told apart by made-up Steam IDs in a fixed range; that range now counts as LAN only while a LAN session is running, so a real Steam account in it is never routed to LAN.
+
+### For developers
+
+- `run-lab.ps1 -Delay 80,30` holds every received LAN frame 80 ms ± 30 ms (in order), so the same-PC lab sees an internet-like link; `-Fps` sets the copies' frame rate. The lab no longer needs Steam.
+- The host logs when its equip menu opens or closes. Once in five delayed lab runs the guest's equip menu opened by itself on the world map, following a host "open" that the host's own bot never caused; the cause is not found yet, and the log line is there to catch it.
+- `back-to-map` now allows 1.5 s between the two copies (it was 3 s, which let a backup path hide dropped scene packets).
 
 ## v1.7.0 - 2026-10-27
 

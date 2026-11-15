@@ -1067,7 +1067,8 @@ namespace CupheadOnline.Patches
             if (_preview.HasValue)
                 return _preview.Value;
             var net = Plugin.Net;
-            if (net == null || !net.IsSteamReady)
+            // LAN play works without Steam, so a LAN session gets the normal lobby phases.
+            if (net == null || (!net.IsSteamReady && !net.IsLanSession))
                 return Phase.NoSteam;
             if (net.IsConnected)
                 return net.IsHost ? Phase.HostConnected : Phase.GuestConnected;
@@ -1099,13 +1100,14 @@ namespace CupheadOnline.Patches
                     if (steam && Plugin.Net.CanRetryLastAction)
                         _rows.Add(LobbyRow.Action(RowRetry, Plugin.Net.GetRetryActionLabel()));
                     _rows.Add(LobbyRow.Action(RowHost, "HOST A GAME", steam));
-                    _rows.Add(LobbyRow.Action(RowJoin, "JOIN A GAME", steam));
+                    string clipLan; int clipPort;
+                    _rows.Add(LobbyRow.Action(RowJoin, "JOIN A GAME", steam || TryGetClipboardLanAddress(out clipLan, out clipPort)));
                     // The card fits 7 rows cleanly and draws 8 at most, so the LAN row gives way when two
                     // of the optional rows are showing (after a LAN session the retry row hosts on LAN again).
                     int optional = (partner.Known ? 1 : 0) + (steam && Plugin.Net.CanRetryLastAction ? 1 : 0)
                                  + (UpdateChecker.UpdateAvailable ? 1 : 0);
                     if (optional <= 1)
-                        _rows.Add(LobbyRow.Action(RowHostLan, "HOST ON LAN", steam));
+                        _rows.Add(LobbyRow.Action(RowHostLan, "HOST ON LAN"));
                     color.GapBefore = true;
                     _rows.Add(color);
                     if (UpdateChecker.UpdateAvailable)
@@ -1204,7 +1206,7 @@ namespace CupheadOnline.Patches
             {
                 case Phase.NoSteam:
                     color = NativeUiKit.Red;
-                    return "Steam isn't running. Start Cuphead from Steam to play online.";
+                    return "Steam isn't running. Start Cuphead from Steam to play online, or HOST ON LAN.";
                 case Phase.Busy:
                     switch (Plugin.Net.CurrentStateName)
                     {
@@ -1902,20 +1904,20 @@ namespace CupheadOnline.Patches
         {
             string clipboardRaw;
             string clipboardLobbyId;
-            if (!Plugin.Net.IsSteamReady)
-            {
-                _waitingForInvite      = false;
-                MpMenuState.InputLocked = false;
-                MpMenuState.SetStatus(Plugin.Net.SteamUnavailableStatus);
-                return;
-            }
-
             string lanAddress; int lanPort;
             if (TryGetClipboardLanAddress(out lanAddress, out lanPort))
             {
                 _waitingForInvite = false;
                 _joinOverlayReady = false;
                 MpMenuState.InputLocked = Plugin.Net.JoinLan(lanAddress, lanPort);
+                return;
+            }
+
+            if (!Plugin.Net.IsSteamReady)
+            {
+                _waitingForInvite      = false;
+                MpMenuState.InputLocked = false;
+                MpMenuState.SetStatus(Plugin.Net.SteamUnavailableStatus);
                 return;
             }
 

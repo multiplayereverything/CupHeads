@@ -13,8 +13,9 @@ $mutants = [ordered]@{
     'health'   = @{ Drop = 'DamageEvent,PlayerStatus'; MustFail = @('guest-hits-and-death') }
     'revive'   = @{ Drop = 'ReviveRequest,ReviveGrant'; MustFail = @('revive', 'parry-revive') }
     # Lost hits: the owner's status stream must still bring the other copy down (ParticipantStatusTracker.ReconcileRemoteBodies).
-    # The guest's own cup corrected vertically in mid-air again: its jump must come out short.
-    'air-pull' = @{ Spec = 'airpull'; MustFail = @('jump.guest-full-height') }
+    # The guest's own cup corrected vertically in mid-air again: its jump must come out short. Needs an
+    # internet-like delay; on one PC with no delay the two copies agree too closely for it to show.
+    'air-pull' = @{ Spec = 'airpull'; Delay = '80,30'; MustFail = @('jump.guest-full-height') }
     'lost-hits' = @{ Drop = 'DamageEvent'; MustPass = @('guest-hits-and-death', 'guest-second-death') }
 }
 $summary = @()
@@ -23,7 +24,9 @@ foreach ($name in $mutants.Keys) {
     $m = $mutants[$name]
     $spec = if ($m.Spec) { $m.Spec } else { "drop:$($m.Drop)" }
     Write-Output "=== $name ($spec)"
-    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'run-lab.ps1') -Mutate $spec | Out-Null
+    $labArgs = @('-Mutate', $spec)
+    if ($m.Delay) { $labArgs += @('-Delay', $m.Delay) }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'run-lab.ps1') @labArgs | Out-Null
     $tag = 'mut-' + ($spec -replace '[^A-Za-z0-9]+', '-')
     $res = Get-Content (Join-Path $root "artifacts\tests\$tag\results.json") -Raw | ConvertFrom-Json
     $byName = @{}; foreach ($r in $res.results) { $byName[$r.check] = $r }
