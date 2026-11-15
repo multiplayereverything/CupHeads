@@ -76,6 +76,7 @@ The lab runs two isolated game copies on one PC, connects them over the LAN fall
 ```powershell
 .\scripts\setup-lab.ps1          # once: private/lab-host and private/lab-client, linked to the Steam install
 .\scripts\run-lab.ps1            # one tour, judged by tests/verify-lab.py
+.\scripts\run-lab.ps1 -Delay 80,30   # the same tour over an internet-like link (80 ms ± 30 ms)
 .\scripts\mutants.ps1            # each mutation drops one kind of packet; its checks must fail
 ```
 
