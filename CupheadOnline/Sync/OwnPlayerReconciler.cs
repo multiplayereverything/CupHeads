@@ -23,10 +23,12 @@ namespace CupheadOnline.Sync
         const float SnapDistance = 320f;
         const float BlendPerStep = 0.2f;
         // A jump rises at about 1200 units/s, so one frame of timing difference between the two
-        // machines is already past DeadZone. Correcting that pulled the guest down on the way up and
-        // held it up on the way down ("weird gravity", jumps cut short). In the air only a real
-        // vertical divergence (a missed platform, a knock-up) is corrected.
-        const float AirVerticalDeadZone = 150f;
+        // machines is already past DeadZone, and the jump's height depends on how long the button is
+        // held, which network jitter changes by tens of ms on the host's copy. Correcting that pulled
+        // the guest down on the way up and held it up on the way down ("weird gravity", jumps cut
+        // short), and even a snap-sized gap shows up mid-jump (it threw the guest up to twice its
+        // jump height). So height is never corrected in the air; the guest lands on its own and any
+        // remaining gap is corrected on the ground.
 
         /// <summary>Levels: players run at 490 units/s. The world map walker moves at 2.5 units/s.</summary>
         public const float LevelUnitScale = 1f;
@@ -134,7 +136,7 @@ namespace CupheadOnline.Sync
         /// </summary>
         public static Vector2 Apply(Transform body, bool airborne = false)
         {
-            if (airborne && !Diagnostics.LabMutations.AirPull && Mathf.Abs(_pending.y) < AirVerticalDeadZone * _unitScale)
+            if (airborne && !Diagnostics.LabMutations.AirPull)
                 _pending.y = 0f;
 
             float minStep = 0.1f * _unitScale;

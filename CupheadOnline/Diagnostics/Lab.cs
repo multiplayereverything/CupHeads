@@ -419,10 +419,10 @@ namespace CupheadOnline.Diagnostics
             yield return Steer(host ? "move.level.host" : "move.level.client", 1f, 1.2f);
 
             // ── Full jumps: the host's cup is the reference, the guest's must match it ──
-            Plugin.Instance.StartCoroutine(TraceHeights(levelAt + 4.5f, levelAt + 11f));
-            // The guest jumps three times: whether a correction lands mid-jump depends on how each
+            Plugin.Instance.StartCoroutine(TraceHeights(levelAt + 4.5f, levelAt + 13f));
+            // The guest jumps five times: whether a correction lands mid-jump depends on how each
             // jump's timing lines up with the host's, so one jump alone can miss the bug.
-            for (int j = 0; j < (host ? 1 : 3); j++)
+            for (int j = 0; j < (host ? 1 : 5); j++)
             {
                 yield return Until(levelAt + (host ? 5.5f : 8.4f + 0.85f * j));
                 LabLog.Event(host ? "jump.host" : "jump.client");
@@ -452,7 +452,7 @@ namespace CupheadOnline.Diagnostics
             else
             {
                 // ── Guest takes hits until it dies, then is revived through the host ──
-                yield return Until(levelAt + 11f);
+                yield return Until(levelAt + 13f);
                 yield return HitUntilDead("kill");
                 yield return Pause(3f);
                 LabLog.Event("revive.request", "\"ok\":" + (RequestRevive() ? 1 : 0));

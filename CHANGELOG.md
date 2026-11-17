@@ -1,12 +1,12 @@
 # Changelog
 
-## Unreleased
+## v1.7.1 - 2026-11-17
 
-Wire protocol is still 4. Tested in the same-PC lab with an 80 ms (±30 ms) delay on the link: 16/16 checks, and all eight mutants behave as expected. Not yet tested between two real Steam accounts.
+Wire protocol is still 4, so 1.7.1 connects to 1.5.x-1.7.0, but use the same version on both PCs to get the fixes below. Tested in the same-PC lab: 16/16 checks in four tours (three with an 80 ms ± 30 ms delay on the link), and all eight mutants behave as expected. Not yet tested between two real Steam accounts.
 
 ### Fixes
 
-- The guest's jumps were cut short ("weird gravity"). In the lab with the old code and an internet-like delay, two of the guest's three jumps reached only 98 and 107 units of the full 283. The guest's own cup was pulled toward the host's re-simulation of it every frame, and in the air one frame of timing difference is already more than the 20-unit dead zone, so the guest was pulled down on the way up and held up on the way down. In the air the guest's height is now corrected only when it is more than 150 units off; sideways correction is unchanged. Lab check `jump.guest-full-height` (each of the guest's three jumps must reach 93% of the host's) and mutant `air-pull` added.
+- The guest's jumps were cut short ("weird gravity"). In the lab with the old code and an internet-like delay, two of the guest's three jumps reached only 98 and 107 units of the full 283, and a partial fix still threw one up to 579. The guest's own cup was pulled toward the host's re-simulation of it every frame, and in the air one frame of timing difference is already more than the 20-unit dead zone, so the guest was pulled down on the way up and held up on the way down. Jump height also depends on how long the button is held, which network jitter changes on the host's copy. The guest's height is now never corrected while it is in the air (a large gap could also throw it up to twice its jump height); any gap left is corrected after landing, and sideways correction is unchanged. Lab check `jump.guest-full-height` (each of the guest's five jumps must be within 7% of the host's) and mutant `air-pull` added.
 - After a retry or a level change, the partner's cup could die at the start of the fight if this PC loaded first: the partner's last status from the previous level still said "dead". A status older than 1.25 s (the owner sends one every second in a level) no longer kills or revives the other copy.
 - With a previous partner, a retry and an update notice all showing, the main multiplayer menu had 9 rows and the card only draws 8, so BACK disappeared. HOST ON LAN now gives way when two of those optional rows are showing.
 - LAN play no longer needs Steam: HOST ON LAN, and JOIN A GAME with a LAN address on the clipboard, work when Steam isn't running.

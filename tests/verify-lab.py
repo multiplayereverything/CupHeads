@@ -111,9 +111,12 @@ def main(run):
     own = [apex(client, j, "p2") for j in events(client, "jump.client")]
     own = [h for h in own if h is not None]
     low = min(own) if own else None
-    check("jump.guest-full-height", ref and len(own) == 3 and ref > 100 and low >= 0.93 * ref,
-          "host's own jump %s, guest's own jumps %s (lowest %s)"
-          % (ref and round(ref, 1), [round(h, 1) for h in own], "%.0f%%" % (100 * low / ref) if ref and low else "-"))
+    high = max(own) if own else None
+    # Too high is as wrong as too short: a correction mid-jump can throw the cup up as well as pull it down.
+    check("jump.guest-full-height", ref and len(own) == 5 and ref > 100 and low >= 0.93 * ref and high <= 1.07 * ref,
+          "host's own jump %s, guest's own jumps %s (%s to %s)"
+          % (ref and round(ref, 1), [round(h, 1) for h in own],
+             "%.0f%%" % (100 * low / ref) if ref and low else "-", "%.0f%%" % (100 * high / ref) if ref and high else "-"))
 
     def death(name, step):
         kill = first(client, step)
